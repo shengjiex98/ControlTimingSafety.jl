@@ -141,7 +141,7 @@ function synthesize_constraints(sysd::AbstractStateSpace{<:Discrete},
 
     if fullresults
         for window = 1:maxwindow, meet=1:window
-            devs[window, meet] = devub(meet, window, sysd, K, z_0, d_max, n, H)
+            devs[window, meet] = devub(meet, window, sysd, K, z_0, d_max, n, H, nominal)
             if devs[window, meet] <= d_max && meet < window
                 push!(safe_constraints, MeetAny(meet, window))
             end
@@ -177,10 +177,11 @@ Compute the deviation upper bound for a given system under the weakly hard const
 function devub(meet::Integer, window::Integer, sysd::AbstractStateSpace{<:Discrete},
         K::AbstractMatrix{<:Real}, z_0::AbstractVecOrMat, d_max::Real, n::Integer,
         H::Integer, nominal::Union{Matrix{<:Real}, Nothing}=nothing)
-    @boundscheck nominal === nothing || size(nominal, 1) == H+1 || throw(ArgumentError("nominal and H mismatch"))
-    if meet == window && nominal === nothing
-        return 0.
-    end
+    @boundscheck nominal === nothing || size(nominal, 2) == H+1 || throw(ArgumentError("nominal and H+1 mismatch: nominal:$(size(nominal, 2)), H|1:$(H+1)"))
+    # if meet == window && nominal === nothing
+    #     @info "TAKING EASY WAY OUT"
+    #     return 0.
+    # end
     constraint = MeetAny(meet, window)
     a = hold_kill(sysd, K, constraint)
     reachable = bounded_runs_iter(a, z_0, n, H, safety_margin=d_max)
