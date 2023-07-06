@@ -162,19 +162,19 @@ function bounded_runs_iter(a::Automaton, z_0::AbstractVecOrMat, n::Integer, H::I
         A[i] = Automaton(a, i)
     end
 
-    if isfinite(safety_margin)
-        nominal = ones(Int64, n*(t+1))
-        nom = Array{Float64}(undef, size(a.C, 1), 2^size(z_0,1), n*(t+1)+1)
-        corners = corners_from_bounds(z_0)
-        for (i, c) in enumerate(eachcol(corners))
-            e = evol(a, c, nominal)
-            nom[:,i,:] = a.C * e'
-        end
-        d = deviation(a, z_0, all_bounds[1:n+1,:,:], nominal_trajectory=nom[:,:,1:n+1])
-        if maximum(d) > safety_margin
-            return all_bounds[1:n+1,:,:]
-        end
-    end
+    # if isfinite(safety_margin)
+    #     nominal = ones(Int64, n*(t+1))
+    #     nom = Array{Float64}(undef, size(a.C, 1), 2^size(z_0,1), n*(t+1)+1)
+    #     corners = corners_from_bounds(z_0)
+    #     for (i, c) in enumerate(eachcol(corners))
+    #         e = evol(a, c, nominal)
+    #         nom[:,i,:] = a.C * e'
+    #     end
+    #     d = deviation(a, z_0, all_bounds[1:n+1,:,:], nominal_trajectory=nom[:,:,1:n+1])
+    #     if maximum(d) > safety_margin
+    #         return all_bounds[1:n+1,:,:]
+    #     end
+    # end
 
     # Dimensions: initial location, final location, time, augmented state, min/max
     new_bounds = Array{Float64}(undef, nlocations(a), nlocations(a), n+1, a.nz, 2)
@@ -190,12 +190,12 @@ function bounded_runs_iter(a::Automaton, z_0::AbstractVecOrMat, n::Integer, H::I
         # Save the bounds
         merge_bounds!(view(all_bounds, n*(i-1)+1:n*i+1, :, :), bounds)
 
-        if isfinite(safety_margin)
-            d = deviation(a, z_0, all_bounds[n*(i-1)+2:n*i+1,:,:], nominal_trajectory=nom[:,:,n*(i-1)+2:n*i+1])
-            if maximum(d) > safety_margin
-                return all_bounds[1:n*i+1,:,:]
-            end
-        end
+        # if isfinite(safety_margin)
+        #     d = deviation(a, z_0, all_bounds[n*(i-1)+2:n*i+1,:,:], nominal_trajectory=nom[:,:,n*(i-1)+2:n*i+1])
+        #     if maximum(d) > safety_margin
+        #         return all_bounds[1:n*i+1,:,:]
+        #     end
+        # end
     end
     all_bounds[1:H+1,:,:]
 end
@@ -241,6 +241,8 @@ Base.@propagate_inbounds function deviation(a::Automaton, z_0::AbstractVecOrMat{
             end
         end
     end
+
+    # @info nominal_trajectory
 
     # Compute Hausdorff distance at each time step
     H = Array{Float64}(undef, size(nominal_trajectory, 3))
