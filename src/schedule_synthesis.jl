@@ -21,7 +21,7 @@ ASPDAC 2023.
 DOI: [10.1145/3566097.3567848](https://doi.org/10.1145/3566097.3567848)
 """
 function schedule_xghtc(constraints::Vector{<:MeetAny}, H::Integer;
-        slotsize::Integer=1, work_conserving::Bool=false)
+        slotsize::Integer=1, work_conserving::Bool=false, fullpath::Bool=false)
     # Check if "utilization" is greater than available slot size
     utilization = sum(c -> c.meet/c.window, constraints)
     if utilization > slotsize
@@ -48,7 +48,7 @@ function schedule_xghtc(constraints::Vector{<:MeetAny}, H::Integer;
                 continue
             elseif l_new in path
                 # Found cycle -> Case (2)
-                return _path_to_schedule(reverse(cons(l_new, path)), AS)
+                return _path_to_schedule(reverse(cons(l_new, path)), AS, fullpath)
             end
             next_states[l_new] = cons(l_new, path)
         end
@@ -64,7 +64,7 @@ function schedule_xghtc(constraints::Vector{<:MeetAny}, H::Integer;
     for (l, path) in pairs(current_states)
         if AS.Q_f(l)
             # If the outer loop ends and accepting state is found -> Case (1)
-            return _path_to_schedule(reverse(path), AS)
+            return _path_to_schedule(reverse(path), AS, fullpath)
         end
     end
 
@@ -79,10 +79,10 @@ Given a list of safe constraints for each system, synthesize a schedule using on
 constraint from each list. The first successful synthesis result is returned.
 """
 function schedule_xghtc(allconstraints::Vector{<:Vector{<:MeetAny}}, H::Integer;
-        slotsize::Integer=1, work_conserving::Bool=false)
+        slotsize::Integer=1, work_conserving::Bool=false, fullpath::Bool=false)
     for constraints in Iterators.product(allconstraints...)
         sch = schedule_xghtc(collect(constraints), H, 
-            slotsize=slotsize, work_conserving=work_conserving)
+            slotsize=slotsize, work_conserving=work_conserving, fullpath=fullpath)
         if length(sch) > 0
             println(constraints)
             return sch
@@ -118,9 +118,11 @@ Given a schedule in the matrix form, the position of the task in the schedule an
 length of the sequence, returns a sequence of 0s and 1s of length H representing the deadline
 hits and misses for that task under the given schedule.
 """
-function schedule_to_sequence(schedule::Matrix{<:Integer}, task::Integer, H::Integer)
-    σ = schedule[task, :]
-    [repeat(σ, H ÷ length(σ)); σ[1:H % length(σ)]]
+schedule_to_sequence(schedule::Matrix{<:Integer}, task::Integer, H::Integer) =
+    schedule_to_sequence(schedule[task, :], H)
+
+function schedule_to_sequence(schedule::Vector{<:Integer}, H::Integer)
+    [repeat(schedule, H÷length(schedule)); schedule[1:H%length(schedule)]]
 end
 
 """
@@ -179,14 +181,16 @@ function devub(meet::Integer, window::Integer, sysd::AbstractStateSpace{<:Discre
         H::Integer, nominal::Union{Matrix{<:Real}, Nothing}=nothing)
     @boundscheck nominal === nothing || size(nominal, 2) == H+1 || throw(ArgumentError("nominal and H+1 mismatch: nominal:$(size(nominal, 2)), H|1:$(H+1)"))
     # if meet == window && nominal === nothing
-    #     @info "TAKING EASY WAY OUT"
     #     return 0.
     # end
     constraint = MeetAny(meet, window)
     a = hold_kill(sysd, K, constraint)
-    reachable = bounded_runs_iter(a, z_0, n, H, safety_margin=d_max)
-    if size(reachable, 1) != H+1
-        return d_max
+    reachable = bounded_runs_iter(a, z_0, n, H)
+    # if size(reachable, 1) != H+1
+    #     return d_max
+    # end
+    if nominal !== nothing
+        nominal = reshape(nominal, (size(nominal, 1), 1, size(nominal, 2)))
     end
     # @info "Data" meet window size(reachable, 1) argmax(deviation(a, z_0, reachable))
     maximum(deviation(a, z_0, reachable, nominal_trajectory=nominal))
@@ -418,13 +422,13 @@ function _SynthesizedAutomaton(controllers::Vector{_ConstraintAutomaton}; slotsi
     _SynthesizedAutomaton(N, B, L, Σ, T, L-1, Q_f)
 end
 
-function _path_to_schedule(path::Union{LinkedList{<:Integer}, Vector{<:Integer}}, AS::_SynthesizedAutomaton)
+function _path_to_schedule(path::Union{LinkedList{<:Integer}, Vector{<:Integer}}, AS::_SynthesizedAutomaton, fullpath::Bool=false)
     # Convert path to Vector
     path = collect(path)
 
     # Find if there is a cycle in path. If so, proceed with only the repeating part.
     index = findfirst(isequal(path[end]), path)
-    if index < length(path)
+    if !fullpath && index < length(path)
         path = path[index:end]
     end
 
